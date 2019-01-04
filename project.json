@@ -1,0 +1,12 @@
+{
+    "id": "bake.corto",
+    "type": "package",
+    "value": {
+        "author": "Sander Mertens",
+        "description": "Corto driver for bake",
+        "version": "1.0.0",
+        "repository": "https://github.com/cortoproject/bake-corto",
+        "license": "GPL3",
+        "use": ["bake.util"]
+    }
+}
