@@ -128,7 +128,10 @@ void build_generated(
         free(cmd);
     }
 
-    if (driver->get_attr_bool("use-generated-api") && project->public) {
+    if (driver->get_attr_bool("use-generated-api") &&
+        project->public &&
+        project->type == BAKE_PACKAGE)
+    {
         char *c_api_id = ut_asprintf("%s.c", project->id);
         driver->use(c_api_id);
         free(c_api_id);
