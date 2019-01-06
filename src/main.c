@@ -57,8 +57,8 @@ void gen_source(
         int count = 0;
         while (ut_iter_hasNext(&it)) {
             char *use = ut_iter_next(&it);
-            if (!strcmp(use, strarg("%s/c", project->id)) ||
-                !strcmp(use, strarg("%s/cpp", project->id)))
+            if (!strcmp(use, strarg("%s.c", project->id)) ||
+                !strcmp(use, strarg("%s.cpp", project->id)))
             {
                 /* Should not add own generated language packages because they
                  * may not yet exist */
@@ -84,8 +84,8 @@ void gen_source(
         int count = 0;
         while (ut_iter_hasNext(&it)) {
             char *use = ut_iter_next(&it);
-            if (!strcmp(use, strarg("%s/c", project->id)) ||
-                !strcmp(use, strarg("%s/cpp", project->id)))
+            if (!strcmp(use, strarg("%s.c", project->id)) ||
+                !strcmp(use, strarg("%s.cpp", project->id)))
             {
                 /* Should not add own generated language packages because
                  * they may not yet exist */
@@ -173,6 +173,67 @@ error:
 }
 
 static
+bool is_corto_project(
+    bake_project *project)
+{
+    if (project->drivers) {
+        ut_iter it = ut_ll_iter(project->drivers);
+
+        while (ut_iter_hasNext(&it)) {
+            bake_project_driver *pd = ut_iter_next(&it);
+            if (!strcmp(pd->id, "corto")) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+static
+void add_language_extensions(
+    bake_driver_api *driver,
+    bake_project *project,
+    ut_ll deps)
+{
+    uint32_t i = 0, count = ut_ll_count(deps);
+    ut_iter it = ut_ll_iter(deps);
+    while (ut_iter_hasNext(&it)) {
+        const char *dep = ut_iter_next(&it);
+        bool is_corto = !strcmp(dep, "corto");
+
+        bake_project *dep_project = driver->lookup(dep);
+        if (!dep_project) {
+            continue;
+        }
+
+        char *apidep = ut_asprintf("%s.%s", dep, project->language);
+
+        /* Always add if dep is a corto project, or if dep is corto */
+        if (is_corto_project(dep_project)) {
+            driver->use(apidep);
+        } else if (is_corto) {
+            /* Corto currently only has a c binding */
+            driver->use("corto.c");
+        } else {
+            /* If not a corto project, check if the project has manually created
+             * language specific projects. This will not work if these projects
+             * are generated. */
+            if (driver->exists(apidep)) {
+                driver->use(apidep);
+            }
+        }
+
+        free(apidep);
+
+        i ++;
+        if (i == count) {
+            break;
+        }
+    }
+}
+
+static
 void init(
     bake_driver_api *driver,
     bake_config *config,
@@ -188,6 +249,7 @@ void init(
         driver->set_attr_bool("c4cpp", true);
     }
 
+    ut_ll_append(project->use_build, ut_strdup("bake.corto"));
     ut_ll_append(project->use_build, ut_strdup("driver.gen.c.project"));
     ut_ll_append(project->use_build, ut_strdup("driver.gen.c.interface"));
 
@@ -196,27 +258,19 @@ void init(
         ut_ll_append(project->use_build, ut_strdup("driver.gen.c.type"));
         ut_ll_append(project->use_build, ut_strdup("driver.gen.c.api"));
         ut_ll_append(project->use_build, ut_strdup("driver.gen.c.cpp"));
-    }
 
-    uint32_t i = 0, count = ut_ll_count(project->use);
+        char *ext = strrchr(model, '.');
+        if (ext) {
+            ext ++;
+            ut_ll_append(project->use_build,
+                ut_asprintf("driver.ext.%s", ext));
+        }
+    }
 
     /* Automatically add language-specific extensions */
     if (driver->get_attr_bool("use-generated-api")) {
-        ut_iter it = ut_ll_iter(project->use);
-        while (ut_iter_hasNext(&it)) {
-            const char *dep = ut_iter_next(&it);
-            char *apidep = ut_asprintf("%s.%s", dep, project->language);
-            if (driver->exists(apidep)) {
-                driver->use(apidep);
-            } else {
-                free(apidep);
-            }
-
-            i ++;
-            if (i == count) {
-                break;
-            }
-        }
+        add_language_extensions(driver, project, project->use);
+        add_language_extensions(driver, project, project->use_private);
     }
 }
 
